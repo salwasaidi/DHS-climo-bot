@@ -24,7 +24,7 @@ def send_welcome(message):
         "Sila pilih kategori di bawah:", 
         reply_markup=main_menu(), parse_mode="Markdown")
 
-# Dictionary untuk simpan 'state' atau pilihan terakhir pengguna
+# Dictionary untuk simpan pilihan kategori pengguna
 user_choice = {}
 
 @bot.message_handler(func=lambda message: True)
@@ -32,28 +32,32 @@ def handle_all(message):
     uid = message.chat.id
     text = message.text
 
-    # 1. Jika pengguna pilih kategori dari menu
+    # 1. Mengesan Pilihan Kategori
     if text == "📍 Cuaca Semasa":
         user_choice[uid] = "weather"
-        bot.send_message(uid, "Sila masukkan nama bandar untuk semak **Cuaca Semasa**.")
+        bot.send_message(uid, "Anda memilih **Cuaca Semasa**. Sila masukkan nama bandar (cth: Muar).", parse_mode="Markdown")
     
     elif text == "📅 Ramalan 7 Hari":
         user_choice[uid] = "forecast"
-        bot.send_message(uid, "Sila masukkan nama bandar untuk **Ramalan 7 Hari**.")
+        bot.send_message(uid, "Anda memilih **Ramalan 7 Hari**. Sila masukkan nama bandar (cth: Kuching).", parse_mode="Markdown")
     
     elif text == "🌊 Risiko Banjir":
         user_choice[uid] = "flood"
-        bot.send_message(uid, "Sila masukkan nama bandar untuk semak **Risiko Banjir**.")
+        bot.send_message(uid, "Anda memilih **Risiko Banjir**. Sila masukkan nama bandar (cth: Segamat).", parse_mode="Markdown")
     
     elif text == "🔥 Analisis Suhu":
         user_choice[uid] = "temp"
-        bot.send_message(uid, "Sila masukkan nama bandar untuk **Analisis Suhu**.")
+        bot.send_message(uid, "Anda memilih **Analisis Suhu**. Sila masukkan nama bandar (cth: Ipoh).", parse_mode="Markdown")
 
-    # 2. Jika pengguna masukkan nama bandar selepas pilih kategori
+    # 2. Memproses Nama Bandar berdasarkan Kategori yang dipilih
     else:
         choice = user_choice.get(uid)
         
-        # Cari koordinat (Geocoding - Malaysia Sahaja)
+        # Jika user terus taip bandar tanpa pilih kategori, kita defaultkan ke 'weather'
+        if not choice:
+            choice = "weather"
+
+        # Cari koordinat (Malaysia Sahaja)
         geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={text}&count=1&language=en&format=json&country=MY"
         geo_resp = requests.get(geo_url).json()
         
@@ -64,12 +68,13 @@ def handle_all(message):
         loc = geo_resp['results'][0]
         lat, lon = loc['latitude'], loc['longitude']
 
-        # LOGIK BERASASKAN PILIHAN USER
+        # --- OUTPUT BERASASKAN KATEGORI ---
+        
         if choice == "weather":
             w_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=True"
             data = requests.get(w_url).json()
             temp = data['current_weather']['temperature']
-            bot.reply_to(message, f"📍 **{loc['name']}**\n🌡️ Suhu Semasa: {temp}°C", parse_mode="Markdown")
+            bot.reply_to(message, f"📍 **{loc['name']}, {loc.get('admin1', 'Malaysia')}**\n🌡️ Suhu Semasa: {temp}°C", parse_mode="Markdown")
 
         elif choice == "forecast":
             f_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=temperature_2m_max,temperature_2m_min&timezone=auto"
@@ -80,7 +85,8 @@ def handle_all(message):
             bot.reply_to(message, msg, parse_mode="Markdown")
 
         elif choice == "flood":
-            w_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=precipitation_sum&timezone=auto"
+            w_url = f"https://api.open-meteo.get/v1/forecast?latitude={lat}&longitude={lon}&daily=precipitation_sum&timezone=auto"
+            # Nota: Menggunakan precipitation_sum untuk risiko banjir
             data = requests.get(w_url).json()
             rain = data['daily']['precipitation_sum'][0]
             status = "✅ Rendah"
@@ -97,7 +103,7 @@ def handle_all(message):
             elif temp > 35: advice = "🟡 Cuaca panas, banyakkan minum air."
             bot.reply_to(message, f"🔥 **Analisis Suhu: {loc['name']}**\n🌡️ Suhu: {temp}°C\n💡 Info: {advice}", parse_mode="Markdown")
 
-        else:
-            bot.reply_to(message, "Sila pilih kategori dahulu daripada menu di bawah.")
+        # Reset pilihan supaya user boleh pilih kategori baru
+        user_choice[uid] = None
 
 bot.polling()
