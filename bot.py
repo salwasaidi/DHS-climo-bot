@@ -20,15 +20,15 @@ def main_menu():
     markup.add(
         telebot.types.KeyboardButton("📍 Cuaca & Nasihat AI"),
         telebot.types.KeyboardButton("📊 Graf Ramalan 7 Hari"),
-        telebot.types.KeyboardButton("🌊 Risiko Banjir Muar"),
-        telebot.types.KeyboardButton("🔥 Analisis Haba")
+        telebot.types.KeyboardButton("🌊 Analisis Risiko Banjir"),
+        telebot.types.KeyboardButton("🔥 Analisis Gelombang Haba")
     )
     return markup
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     bot.reply_to(message, 
-        "Selamat Datang ke **DHS Climo**! 🌦️\nSistem Pintar Cuaca Komuniti Muar.\n\n"
+        "Selamat Datang ke **DHS Climo**! 🌦️\nSistem Pintar Cuaca\n\n"
         "Sila pilih fungsi di bawah untuk analisis AI:", 
         reply_markup=main_menu(), parse_mode="Markdown")
 
@@ -42,8 +42,8 @@ def handle_all(message):
     menu_map = {
         "📍 Cuaca & Nasihat AI": "weather",
         "📊 Graf Ramalan 7 Hari": "graph",
-        "🌊 Risiko Banjir Muar": "flood",
-        "🔥 Analisis Haba": "heat"
+        "🌊 Analisis Risiko Banjir": "flood",
+        "🔥 Analisis Gelombang Haba": "heat"
     }
 
     if text in menu_map:
@@ -100,7 +100,7 @@ def process_request(message, city):
             
             bot.reply_to(message, f"📍 {full_name}\n🌡️ Suhu: {temp}°C\n💡 **Nasihat Aktiviti:** {advice}", parse_mode="Markdown")
 
-        # 3. RISIKO BANJIR - Masalah Komuniti Muar (Markah C3)
+        # 3. RISIKO BANJIR - Masalah Komuniti (Markah C3)
         elif state == "flood":
             w_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=precipitation_sum&timezone=auto"
             rain = requests.get(w_url).json()['daily']['precipitation_sum'][0]
@@ -108,7 +108,7 @@ def process_request(message, city):
             if rain > 20: status = "🟡 Sederhana (Waspada)"
             if rain > 50: status = "🔴 TINGGI (Risiko Banjir Kilat)"
             
-            bot.reply_to(message, f"🌊 **Zon Amaran Banjir Muar**\n📍 Kawasan: {full_name}\n🌧️ Hujan: {rain}mm\n📊 Status Risiko: {status}", parse_mode="Markdown")
+            bot.reply_to(message, f"🌊 **Zon Amaran Banjir **\n📍 Kawasan: {full_name}\n🌧️ Hujan: {rain}mm\n📊 Status Risiko: {status}", parse_mode="Markdown")
 
         # 4. ANALISIS HABA - CLO2: Penggunaan Data Berbeza
         elif state == "heat":
