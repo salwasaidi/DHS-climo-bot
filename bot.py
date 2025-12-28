@@ -97,14 +97,13 @@ def process_request(message, city):
     uid = message.chat.id
     state = user_state.get(uid, "weather")
     
-    # Ambil sehingga 10 hasil carian untuk ditapis
     geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=10&language=ms&format=json"
     
     try:
         res = requests.get(geo_url).json()
         results = res.get('results', [])
         
-        # LOGIK PENAPISAN: Cari lokasi yang ada country_code 'MY'
+        # Penapisan Malaysia
         loc = None
         for r in results:
             if r.get('country_code') == 'MY':
@@ -118,7 +117,6 @@ def process_request(message, city):
         lat, lon = loc['latitude'], loc['longitude']
         full_name = f"{loc['name']}, {loc.get('admin1', 'Malaysia')}"
 
-        # --- 1. GRAF RAMALAN ---
         if state == "graph":
             f_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=temperature_2m_max&timezone=auto"
             data = requests.get(f_url).json()
@@ -137,7 +135,6 @@ def process_request(message, city):
             bot.send_photo(uid, buf, caption=f"📊 Graf Ramalan untuk {full_name}")
             plt.close()
 
-        # --- 2. CUACA & NASIHAT ---
         elif state == "weather":
             w_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=True"
             curr = requests.get(w_url).json()['current_weather']
@@ -145,6 +142,40 @@ def process_request(message, city):
             w_code = curr['weathercode']
             status_cuaca = get_weather_description(w_code)
             
+            # Memperbaiki SyntaxError baris 150
             advice = "✅ Sesuai untuk aktiviti luar."
-            if temp > 34: advice = "🥵 Cuaca sangat panas. Minum air secukupnya."
-            elif w_code >= 51: advice =
+            if temp > 34: 
+                advice = "🥵 Cuaca sangat panas. Minum air secukupnya."
+            elif w_code >= 51: 
+                advice = "🌧️ Hujan dikesan. Sediakan payung atau baju hujan."
+
+            bot.reply_to(message, f"📍 **Lokasi:** {full_name}\nℹ️ **Keadaan:** {status_cuaca}\n🌡️ **Suhu:** {temp}°C\n\n💡 **Nasihat AI:** {advice}", parse_mode="Markdown")
+
+        elif state == "flood":
+            w_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=precipitation_sum&timezone=auto"
+            rain = requests.get(w_url).json()['daily']['precipitation_sum'][0]
+            status = "🟢 Rendah"
+            if rain > 20: status = "🟡 Sederhana (Waspada)"
+            if rain > 50: status = "🔴 TINGGI (Bahaya Banjir)"
+            
+            bot.reply_to(message, f"🌊 **Amaran Banjir**\n📍 Kawasan: {full_name}\n🌧️ Hujan: {rain}mm\n📊 Risiko: {status}", parse_mode="Markdown")
+
+        elif state == "heat":
+            w_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=temperature_2m_max&timezone=auto"
+            temp_max = requests.get(w_url).json()['daily']['temperature_2m_max'][0]
+            status = "Tahap 0: Normal"
+            if temp_max >= 35: status = "⚠️ Tahap 1: Waspada"
+            
+            bot.reply_to(message, f"🔥 **Gelombang Haba**\n📍 Kawasan: {full_name}\n🌡️ Suhu Maks: {temp_max}°C\n📊 Status: {status}", parse_mode="Markdown")
+
+    except Exception as e:
+        print(f"Error: {e}")
+        bot.reply_to(message, "❌ Ralat teknikal berlaku.")
+
+# ==========================================
+# 5. EXECUTION
+# ==========================================
+if __name__ == "__main__":
+    Thread(target=run_web).start()
+    print("DHS Climo Bot Aktif (Malaysia Mode)")
+    bot.polling(non_stop=True, skip_pending=True)
