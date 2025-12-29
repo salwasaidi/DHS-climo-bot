@@ -7,7 +7,7 @@ from threading import Thread
 from flask import Flask
 
 # ==========================================
-# 1. SETUP FLASK (Wajib untuk Kestabilan Render)
+# 1. SETUP FLASK (Wajib untuk Render)
 # ==========================================
 app = Flask('')
 
@@ -16,7 +16,6 @@ def home():
     return "DHS Climo Bot is Live and Running!"
 
 def run_web():
-    # Menggunakan port yang diberikan oleh Render atau default 10000
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
@@ -25,7 +24,7 @@ def run_web():
 # ==========================================
 try:
     import matplotlib
-    matplotlib.use('Agg') # Untuk mengelakkan ralat paparan pada pelayan
+    matplotlib.use('Agg')
     import matplotlib.pyplot as plt
 except ImportError:
     plt = None
@@ -34,7 +33,7 @@ TOKEN = os.getenv('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
 # ==========================================
-# 3. FUNGSI PEMBANTU (Utility Functions)
+# 3. FUNGSI PEMBANTU
 # ==========================================
 
 def get_weather_description(code):
@@ -58,33 +57,15 @@ def main_menu():
     return markup
 
 # ==========================================
-# 4. HANDLERS (Commands & Messages)
+# 4. HANDLERS
 # ==========================================
 
-@bot.message_handler(commands=['start'])
+@bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     bot.reply_to(message, 
-        "Selamat Datang ke **DHS Climo**! 🌦️\n"
-        "Sistem Amaran Bencana Pintar Komuniti Malaysia.\n\n"
-        "Sila gunakan menu di bawah atau taip `/help` untuk panduan.", 
+        "Selamat Datang ke **DHS Climo**! 🌦️\nSistem Pintar Cuaca & Bencana (Malaysia Mode)\n\n"
+        "Sila pilih fungsi di bawah untuk analisis AI:", 
         reply_markup=main_menu(), parse_mode="Markdown")
-
-@bot.message_handler(commands=['help'])
-def send_help(message):
-    help_text = (
-        "📖 **Panduan Pengguna DHS Climo**\n\n"
-        "1. **Cuaca & Nasihat:** Gunakan AI untuk aktiviti harian.\n"
-        "2. **Graf Ramalan:** Visualisasi suhu seminggu.\n"
-        "3. **Banjir:** Analisis curahan hujan untuk amaran awal.\n"
-        "4. **Haba:** Pantauan risiko gelombang haba.\n"
-        "5. **Gempa:** Semakan aktiviti seismik radius 500km.\n\n"
-        "**Cara Guna:** Pilih menu, kemudian taip nama bandar (cth: Muar)."
-    )
-    bot.reply_to(message, help_text, parse_mode="Markdown")
-
-@bot.message_handler(commands=['location'])
-def update_location(message):
-    bot.reply_to(message, "📍 Sila taip nama bandar atau daerah baru untuk dipantau (cth: Ranau).")
 
 user_state = {}
 
@@ -103,16 +84,14 @@ def handle_all(message):
 
     if text in menu_map:
         user_state[uid] = menu_map[text]
-        bot.send_message(uid, f"Sila masukkan nama bandar (cth: {text.split()[-1]}):", parse_mode="Markdown")
+        bot.send_message(uid, f"Anda memilih **{text}**. Sila masukkan nama bandar (cth: Ranau atau Kemaman):", parse_mode="Markdown")
     else:
-        # Menormalkan input (kemaman -> Kemaman)
-        process_request(message, text.strip().title())
+        process_request(message, text)
 
 def process_request(message, city):
     uid = message.chat.id
     state = user_state.get(uid, "weather")
     
-    # Carian Geo (Fokus Malaysia)
     geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=5&language=ms&format=json"
     
     try:
@@ -121,81 +100,76 @@ def process_request(message, city):
         loc = next((r for r in results if r.get('country_code') == 'MY'), None)
         
         if not loc:
-            bot.reply_to(message, f"❌ '{city}' tidak dijumpai di Malaysia. Sila semak ejaan.")
+            bot.reply_to(message, f"❌ Bandar '{city}' tidak dijumpai di Malaysia.")
             return
         
         lat, lon = loc['latitude'], loc['longitude']
         full_name = f"{loc['name']}, {loc.get('admin1', 'Malaysia')}"
 
-        # 🌋 LOGIK GEMPA BUMI (USGS API)
+        # 1. RISIKO GEMPA BUMI (USGS API - 30 Hari Terakhir)
         if state == "earthquake":
-            eq_url = f"https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&latitude={lat}&longitude={lon}&maxradiuskm=500"
-            eq_res = requests.get(eq_url).json()
-            count = eq_res['metadata']['count']
+            # Semak dalam radius 500km untuk 30 hari lepas
+            eq_url = f"https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&latitude={lat}&longitude={lon}&maxradiuskm=500&orderby=time-asc"
+            eq_data = requests.get(eq_url).json()
+            count = eq_data['metadata']['count']
             
             if count > 0:
-                recent = eq_res['features'][0]['properties']
-                msg = f"🌋 **Risiko Seismik: {full_name}**\n\n⚠️ Aktiviti dikesan: {count} kali\n📉 Magnitud Terakhir: {recent['mag']}\n📍 Lokasi: {recent['place']}"
+                recent = eq_data['features'][0]['properties']
+                msg = (f"🌋 **Analisis Gempa Bumi: {full_name}**\n\n"
+                       f"📊 Aktiviti dikesan (Radius 500km): {count} kali\n"
+                       f"📉 Magnitud Terakhir: {recent['mag']}\n"
+                       f"📍 Lokasi: {recent['place']}\n"
+                       f"⚠️ Status: Waspada Seismik")
             else:
-                msg = f"🌋 **Risiko Seismik: {full_name}**\n\n✅ Tiada aktiviti gempa dikesan dalam radius 500km. Kawasan dikira selamat."
+                msg = f"🌋 **Analisis Gempa Bumi: {full_name}**\n\n✅ Tiada aktiviti dikesan dalam radius 500km. Kawasan stabil."
             bot.reply_to(message, msg, parse_mode="Markdown")
 
-        # 📊 LOGIK GRAF (Matplotlib)
+        # 2. GRAF RAMALAN
         elif state == "graph":
             f_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=temperature_2m_max&timezone=auto"
             data = requests.get(f_url).json()
-            days, temps = [d[5:] for d in data['daily']['time']], data['daily']['temperature_2m_max']
-            
+            days = [d[5:] for d in data['daily']['time']] 
+            temps = data['daily']['temperature_2m_max']
             plt.figure(figsize=(10, 5))
-            plt.plot(days, temps, marker='o', color='tab:blue', linewidth=2)
-            plt.title(f"Ramalan Suhu 7 Hari: {full_name}")
-            plt.ylabel("Suhu (°C)")
-            plt.grid(True, linestyle='--', alpha=0.5)
-            
+            plt.plot(days, temps, marker='o', color='tab:blue')
+            plt.title(f"Ramalan Suhu: {full_name}")
             buf = io.BytesIO()
             plt.savefig(buf, format='png'); buf.seek(0)
-            bot.send_photo(uid, buf, caption=f"📊 Graf Ramalan untuk {full_name}")
+            bot.send_photo(uid, buf, caption=f"📊 Graf Suhu 7 Hari untuk {full_name}")
             plt.close()
 
-        # 📍 CUACA & AI ADVICE
+        # 3. CUACA & NASIHAT AI
         elif state == "weather":
             w_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=True"
             curr = requests.get(w_url).json()['current_weather']
-            desc = get_weather_description(curr['weathercode'])
-            advice = "✅ Sesuai untuk aktiviti luar."
-            if curr['temperature'] > 34: advice = "🥵 Cuaca panas, kurangkan aktiviti luar."
-            elif curr['weathercode'] >= 51: advice = "🌧️ Sediakan payung/baju hujan."
-            
-            bot.reply_to(message, f"📍 **{full_name}**\nℹ️ {desc}\n🌡️ Suhu: {curr['temperature']}°C\n\n💡 **Nasihat AI:** {advice}", parse_mode="Markdown")
+            status = get_weather_description(curr['weathercode'])
+            advice = "✅ Selamat untuk aktiviti luar."
+            if curr['temperature'] > 34: advice = "🥵 Panas, minum air secukupnya."
+            bot.reply_to(message, f"📍 **{full_name}**\nℹ️ {status}\n🌡️ Suhu: {curr['temperature']}°C\n💡 **AI:** {advice}", parse_mode="Markdown")
 
-        # 🌊 BANJIR & 🔥 HABA
-        elif state in ["flood", "heat"]:
-            params = "daily=precipitation_sum" if state == "flood" else "daily=temperature_2m_max"
-            w_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&{params}&timezone=auto"
-            data = requests.get(w_url).json()
-            
-            if state == "flood":
-                val = data['daily']['precipitation_sum'][0]
-                status = "🔴 TINGGI" if val > 50 else "🟡 SEDERHANA" if val > 20 else "🟢 RENDAH"
-                bot.reply_to(message, f"🌊 **Risiko Banjir: {full_name}**\n🌧️ Hujan: {val}mm\n📊 Tahap: {status}", parse_mode="Markdown")
-            else:
-                val = data['daily']['temperature_2m_max'][0]
-                status = "⚠️ WASPADA" if val >= 35 else "🟢 NORMAL"
-                bot.reply_to(message, f"🔥 **Analisis Haba: {full_name}**\n🌡️ Maks: {val}°C\n📊 Status: {status}", parse_mode="Markdown")
+        # 4. RISIKO BANJIR
+        elif state == "flood":
+            w_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=precipitation_sum&timezone=auto"
+            rain = requests.get(w_url).json()['daily']['precipitation_sum'][0]
+            status = "🔴 TINGGI" if rain > 50 else "🟢 Rendah"
+            bot.reply_to(message, f"🌊 **Risiko Banjir: {full_name}**\n🌧️ Hujan: {rain}mm\n📊 Tahap: {status}", parse_mode="Markdown")
+
+        # 5. GELOMBANG HABA
+        elif state == "heat":
+            w_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=temperature_2m_max&timezone=auto"
+            temp_max = requests.get(w_url).json()['daily']['temperature_2m_max'][0]
+            status = "⚠️ Waspada" if temp_max >= 35 else "🟢 Normal"
+            bot.reply_to(message, f"🔥 **Gelombang Haba: {full_name}**\n🌡️ Maks: {temp_max}°C\n📊 Status: {status}", parse_mode="Markdown")
 
     except Exception as e:
-        bot.reply_to(message, "❌ Gangguan teknikal. Sila cuba sebentar lagi.")
+        print(f"Error: {e}")
+        bot.reply_to(message, "❌ Ralat teknikal. Sila cuba lagi.")
 
 # ==========================================
-# 5. EXECUTION (Threaded Polling)
+# 5. EXECUTION
 # ==========================================
 if __name__ == "__main__":
-    # Menjalankan Flask dalam thread berasingan
-    t = Thread(target=run_web)
-    t.start()
-    
-    print("DHS Climo Bot Aktif...")
-    # Membersihkan sambungan lama untuk mengelakkan Ralat 409
+    Thread(target=run_web).start()
     bot.remove_webhook()
     time.sleep(1)
     bot.polling(none_stop=True, skip_pending=True)
