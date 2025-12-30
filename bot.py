@@ -22,9 +22,26 @@ def main_menu():
     markup.add("📍 Cuaca Muar", "📊 Graf Ramalan 7 Hari", "🌊 Risiko Banjir", "🔥 Gelombang Haba", "🌋 Risiko Gempa")
     return markup
 
+# --- BAHAGIAN COMMAND HANDLERS ---
+
 @bot.message_handler(commands=['start'])
 def start(m):
-    bot.reply_to(m, "🌦️ **DHS Climo Muar**\nKlik butang di bawah untuk analisis visual:", reply_markup=main_menu(), parse_mode="Markdown")
+    bot.reply_to(m, "🌦️ **DHS Climo Muar**\nSistem amaran pintar khas untuk warga Muar.\n\nKlik butang di bawah untuk analisis visual atau taip /help:", reply_markup=main_menu(), parse_mode="Markdown")
+
+@bot.message_handler(commands=['help'])
+def help_command(m):
+    help_text = (
+        "📖 **Panduan Penggunaan DHS Climo**\n\n"
+        "1️⃣ **📍 Cuaca Muar**: Info suhu dan keadaan semasa.\n"
+        "2️⃣ **📊 Graf Ramalan**: Visual trend suhu 7 hari ke depan.\n"
+        "3️⃣ **🌊 Risiko Banjir**: Amaran berdasarkan taburan hujan.\n"
+        "4️⃣ **🔥 Gelombang Haba**: Pantauan suhu ekstrem.\n"
+        "5️⃣ **🌋 Risiko Gempa**: Semakan aktiviti seismik terdekat.\n\n"
+        "Gunakan butang menu di bawah untuk laporan pantas."
+    )
+    bot.reply_to(m, help_text, parse_mode="Markdown")
+
+# --- BAHAGIAN TEXT HANDLER ---
 
 @bot.message_handler(func=lambda m: True)
 def handle_menu(m):
@@ -32,16 +49,16 @@ def handle_menu(m):
     txt = m.text
     
     try:
-        # A. GRAF RAMALAN 7 HARI (Fokus Utama Anda)
+        # A. GRAF RAMALAN 7 HARI
         if txt == "📊 Graf Ramalan 7 Hari":
             bot.send_message(uid, "📊 Menjana graf ramalan untuk Muar... Sila tunggu sekejap.")
             res = requests.get(f"https://api.open-meteo.com/v1/forecast?latitude={LAT_MUAR}&longitude={LON_MUAR}&daily=temperature_2m_max&timezone=auto", timeout=5).json()
-            days = [d[5:] for d in res['daily']['time']] # Ambil MM-DD sahaja
+            days = [d[5:] for d in res['daily']['time']] 
             temps = res['daily']['temperature_2m_max']
 
             plt.figure(figsize=(8, 4))
             plt.plot(days, temps, marker='o', color='#1f77b4', linewidth=2, linestyle='-')
-            plt.fill_between(days, temps, color='#1f77b4', alpha=0.1) # Tambah bayang bawah graf
+            plt.fill_between(days, temps, color='#1f77b4', alpha=0.1)
             plt.title(f"Ramalan Suhu Maksimum 7 Hari: Muar")
             plt.xlabel("Tarikh")
             plt.ylabel("Suhu (°C)")
@@ -76,7 +93,7 @@ def handle_menu(m):
             bot.send_message(uid, "🌋 **Status Geologi Muar**\n✅ Tiada aktiviti seismik dikesan.")
 
     except Exception as e:
-        bot.send_message(uid, "⚠️ API sibuk seketika. Sila cuba tekan butang graf lagi.")
+        bot.send_message(uid, "⚠️ API sibuk seketika. Sila cuba tekan butang sekali lagi.")
 
 if __name__ == "__main__":
     Thread(target=run_web).start()
